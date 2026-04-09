@@ -5,11 +5,15 @@ const trackedKeys = [
   'ArrowDown',
   'KeyA',
   'KeyD',
+  'KeyG',
   'KeyN',
   'KeyO',
   'KeyP',
   'KeyR',
   'KeyT',
+  'Digit0',
+  'Equal',
+  'Minus',
   'Space',
 ] as const;
 

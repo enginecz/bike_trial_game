@@ -1,6 +1,6 @@
 import { createFixedStepLoop } from '../core/fixed-step-loop';
 import { readBikeControls } from './bike-controls';
-import { createDebugHudLines } from './debug-hud';
+import { createDebugHudLines, createOverlayLegendEntries, createTerrainLegendEntries } from './debug-hud';
 import { defaultGameSessionConfig } from './session-config';
 import { createPhysicsSimulation } from '../physics/simulation';
 import { createCamera } from '../rendering/camera';
@@ -23,6 +23,8 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
   const debugOverlay = createDebugOverlay();
   let paused = false;
   let suspensionDebugEnabled = false;
+  let terrainDebugEnabled = false;
+  let inspectionZoom = 1;
 
   const loop = createFixedStepLoop({
     fixedDeltaTimeMs: 1000 / 60,
@@ -39,8 +41,24 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
         suspensionDebugEnabled = !suspensionDebugEnabled;
       }
 
+      if (controls.terrainDebugTogglePressed) {
+        terrainDebugEnabled = !terrainDebugEnabled;
+      }
+
       if (controls.testRigTogglePressed) {
         physics.toggleTestRigMode();
+      }
+
+      if (controls.zoomInPressed) {
+        inspectionZoom = clamp(inspectionZoom * 1.15, 0.5, 3);
+      }
+
+      if (controls.zoomOutPressed) {
+        inspectionZoom = clamp(inspectionZoom / 1.15, 0.5, 3);
+      }
+
+      if (controls.zoomResetPressed) {
+        inspectionZoom = 1;
       }
 
       if (controls.resetPressed) {
@@ -57,13 +75,15 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
 
       const snapshot = physics.getSnapshot();
       const speed = Math.hypot(snapshot.bike.frameVelocity.x, snapshot.bike.frameVelocity.y);
-      const lookAheadX = clamp(snapshot.bike.frameVelocity.x * 0.22, -2.2, 2.2);
-      const lookAheadY = clamp(snapshot.bike.frameVelocity.y * 0.08, -0.6, 0.6);
-      const targetZoom = speed > 6 ? 36 : 40;
+      const inspectionMode = suspensionDebugEnabled || terrainDebugEnabled || inspectionZoom !== 1;
+      const lookAheadX = inspectionMode ? 0 : clamp(snapshot.bike.frameVelocity.x * 0.22, -2.2, 2.2);
+      const lookAheadY = inspectionMode ? 0 : clamp(snapshot.bike.frameVelocity.y * 0.08, -0.6, 0.6);
+      const baseZoom = speed > 6 ? 36 : 40;
+      const targetZoom = baseZoom * inspectionZoom;
 
       camera.update(deltaTimeSeconds, {
         targetX: snapshot.bike.framePosition.x,
-        targetY: snapshot.bike.framePosition.y + 0.55,
+        targetY: snapshot.bike.framePosition.y + (inspectionMode ? 0 : 0.55),
         lookAheadX,
         lookAheadY,
         zoom: targetZoom,
@@ -79,6 +99,7 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
             paused,
             snapshot,
             suspensionDebugEnabled,
+            terrainDebugEnabled,
             testRigMode: physics.isTestRigMode(),
           },
           session.bikeTuning,
@@ -93,6 +114,9 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
         level,
         physics: physics.getRenderState(),
         suspensionDebugEnabled,
+        terrainDebugEnabled,
+        overlayLegendEntries: createOverlayLegendEntries(),
+        terrainLegendEntries: createTerrainLegendEntries(),
       });
     },
   });

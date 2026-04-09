@@ -79,6 +79,14 @@ export interface BikeRenderState {
     x: number;
     y: number;
   };
+  rearAxleMinLimit: {
+    x: number;
+    y: number;
+  };
+  rearAxleMaxLimit: {
+    x: number;
+    y: number;
+  };
 }
 
 export interface BikeState {
@@ -381,7 +389,7 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
 
       const sweep = Math.sin(timeSeconds * Math.PI * 2 * tuning.debugRig.sweepFrequencyHz);
       const rearForce = planck.Vec2(0, sweep * tuning.debugRig.rearSweepForce);
-      const frontForce = planck.Vec2(0, -sweep * tuning.debugRig.frontSweepForce);
+      const frontForce = planck.Vec2(0, sweep * tuning.debugRig.frontSweepForce);
 
       rearWheel.applyForceToCenter(rearForce, true);
       frontWheel.applyForceToCenter(frontForce, true);
@@ -395,6 +403,20 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
       const frontSliderBase = serializeVec2(frame.getWorldPoint(planck.Vec2(tuning.fork.mountOffsetX, tuning.fork.mountOffsetY)));
       const frontSliderCurrent = offsetPointAlongAxis(frontSliderBase, forkAxis, forkSliderJoint.getJointTranslation());
       const frontAxleCurrent = serializeVec2(frontWheel.getPosition());
+      const rearAxleLocalOffset = {
+        x: tuning.swingarm.wheelMountOffsetX,
+        y: tuning.swingarm.wheelMountOffsetY - tuning.rearWheel.radius,
+      };
+      const rearAxleMinLimit = offsetPointWithAngle(
+        serializeVec2(frame.getWorldPoint(planck.Vec2(tuning.swingarm.pivotOffsetX, tuning.swingarm.pivotOffsetY))),
+        frame.getAngle() + tuning.rearSuspension.lowerSwingarmAngle,
+        rearAxleLocalOffset,
+      );
+      const rearAxleMaxLimit = offsetPointWithAngle(
+        serializeVec2(frame.getWorldPoint(planck.Vec2(tuning.swingarm.pivotOffsetX, tuning.swingarm.pivotOffsetY))),
+        frame.getAngle() + tuning.rearSuspension.upperSwingarmAngle,
+        rearAxleLocalOffset,
+      );
 
       return {
         frame: serializeBody(frame),
@@ -428,6 +450,8 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
         frontAxleMax: offsetPointAlongAxis(frontAxleCurrent, forkAxis, frontTravelMax - forkSliderJoint.getJointTranslation()),
         rearAxleMinObserved,
         rearAxleMaxObserved,
+        rearAxleMinLimit,
+        rearAxleMaxLimit,
       };
     },
     getState() {
@@ -510,6 +534,20 @@ function offsetPointAlongAxis(point: { x: number; y: number }, axis: planck.Vec2
   return {
     x: point.x + axis.x * distance,
     y: point.y + axis.y * distance,
+  };
+}
+
+function offsetPointWithAngle(
+  origin: { x: number; y: number },
+  angle: number,
+  offset: { x: number; y: number },
+): { x: number; y: number } {
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+
+  return {
+    x: origin.x + offset.x * cosine - offset.y * sine,
+    y: origin.y + offset.x * sine + offset.y * cosine,
   };
 }
 

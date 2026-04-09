@@ -5,6 +5,11 @@ import type { BikeTuning } from '../tuning/bike';
 import type { Level } from '../world/level';
 import { getBikeQuickTuneLines } from '../tuning/bike';
 
+export interface OverlayLegendEntry {
+  color: string;
+  label: string;
+}
+
 export interface DebugHudState {
   camera: Camera;
   controls: BikeControls;
@@ -13,6 +18,7 @@ export interface DebugHudState {
   paused: boolean;
   snapshot: PhysicsSnapshot;
   suspensionDebugEnabled: boolean;
+  terrainDebugEnabled: boolean;
   testRigMode: boolean;
 }
 
@@ -22,8 +28,14 @@ export function createDebugHudLines(state: DebugHudState, tuning: BikeTuning): s
   return [
     state.level.name,
     `State: ${state.paused ? 'paused' : 'running'}`,
-    `Debug overlay: ${state.suspensionDebugEnabled ? 'on' : 'off'}  Test rig: ${state.testRigMode ? 'on' : 'off'}`,
+    `Bike overlay: ${state.suspensionDebugEnabled ? 'on' : 'off'}  Terrain overlay: ${state.terrainDebugEnabled ? 'on' : 'off'}  Test rig: ${state.testRigMode ? 'on' : 'off'}`,
     'Prototype HUD',
+    'Ride Controls',
+    'Up throttle | Down rear brake | A/Space front brake | Left/Right rider shift',
+    'Debug / General',
+    'R reset | O bike overlay | G terrain overlay | T test rig | P pause | N single-step',
+    'View',
+    '- zoom out | = zoom in | 0 reset zoom',
     `Input: ${state.inputSummary || 'none'}`,
     `Throttle: ${state.controls.throttle.toFixed(0)}  Front brake: ${state.controls.brakeFront.toFixed(0)}  Rear brake: ${state.controls.brakeRear.toFixed(0)}`,
     `Rider shift: ${state.controls.riderShift.toFixed(0)}  Reset: ${state.controls.resetPressed ? 'yes' : 'no'}`,
@@ -45,6 +57,30 @@ export function createDebugHudLines(state: DebugHudState, tuning: BikeTuning): s
     `Rear wheel: ${state.snapshot.bike.rearWheelSpeed.toFixed(2)} rad/s`,
     `Front wheel: ${state.snapshot.bike.frontWheelSpeed.toFixed(2)} rad/s`,
     ...getBikeQuickTuneLines(tuning),
-    'Controls: up throttle, down rear brake, A/space front brake, left/right shift, O debug, T rig, P pause, N step, R reset',
+  ];
+}
+
+export function createOverlayLegendEntries(): OverlayLegendEntry[] {
+  return [
+    { color: '#f5f5f5', label: 'wheel centers and tire outlines' },
+    { color: '#ffb703', label: 'frame body' },
+    { color: '#ffd166', label: 'rear swingarm body and rear hard link' },
+    { color: '#7bdff2', label: 'front assembly / fork body' },
+    { color: '#a0e426', label: 'rear wheel body' },
+    { color: '#c77dff', label: 'front wheel body' },
+    { color: '#ff99c8', label: 'rider body' },
+    { color: '#ef476f', label: 'spring-damper lines and joint-of-action references' },
+    { color: '#67d6ff', label: 'travel ranges and travel limit guides' },
+    { color: '#bdb2ff', label: 'reference lines: body-axis orientation guides' },
+    { color: '#ffd166', label: 'joint and pivot markers' },
+  ];
+}
+
+export function createTerrainLegendEntries(): OverlayLegendEntry[] {
+  return [
+    { color: '#f0f0f0', label: 'terrain collision chain' },
+    { color: '#4cc9f0', label: 'terrain segment reference lines' },
+    { color: '#8ae6c1', label: 'terrain chain vertices' },
+    { color: '#ffd166', label: 'spawn marker' },
   ];
 }

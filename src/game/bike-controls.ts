@@ -7,7 +7,11 @@ export interface BikeControls {
   riderShift: number;
   singleStepPressed: boolean;
   suspensionDebugTogglePressed: boolean;
+  terrainDebugTogglePressed: boolean;
   testRigTogglePressed: boolean;
+  zoomInPressed: boolean;
+  zoomOutPressed: boolean;
+  zoomResetPressed: boolean;
   pausePressed: boolean;
   resetPressed: boolean;
 }
@@ -25,7 +29,11 @@ export function readBikeControls(input: KeyboardInput): BikeControls {
     riderShift,
     singleStepPressed: input.consumePressed('KeyN'),
     suspensionDebugTogglePressed: input.consumePressed('KeyO'),
+    terrainDebugTogglePressed: input.consumePressed('KeyG'),
     testRigTogglePressed: input.consumePressed('KeyT'),
+    zoomInPressed: input.consumePressed('Equal'),
+    zoomOutPressed: input.consumePressed('Minus'),
+    zoomResetPressed: input.consumePressed('Digit0'),
     pausePressed: input.consumePressed('KeyP'),
     resetPressed: input.consumePressed('KeyR'),
   };
