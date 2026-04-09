@@ -1,0 +1,29 @@
+:root {
+  color-scheme: dark;
+  font-family: Arial, sans-serif;
+  background: #111111;
+  color: #f5f5f5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    linear-gradient(180deg, #191919 0%, #111111 65%, #0b0b0b 100%);
+}
+
+body {
+  overflow: hidden;
+}
+
+#game {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
+}

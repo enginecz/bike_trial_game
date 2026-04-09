@@ -1,0 +1,561 @@
+import * as planck from 'planck-js';
+import type { BikeControls } from '../game/bike-controls';
+import type { BikeTuning } from '../tuning/bike';
+
+export interface BikeRenderBody {
+  position: {
+    x: number;
+    y: number;
+  };
+  angle: number;
+}
+
+export interface BikeRenderState {
+  frame: BikeRenderBody;
+  swingarm: BikeRenderBody;
+  fork: BikeRenderBody;
+  rider: BikeRenderBody & {
+    radius: number;
+  };
+  rearWheel: BikeRenderBody & {
+    radius: number;
+  };
+  frontWheel: BikeRenderBody & {
+    radius: number;
+  };
+  frameRearPivot: {
+    x: number;
+    y: number;
+  };
+  frameFrontPivot: {
+    x: number;
+    y: number;
+  };
+  swingarmRearAxle: {
+    x: number;
+    y: number;
+  };
+  forkFrontAxle: {
+    x: number;
+    y: number;
+  };
+  rearWheelAnchor: {
+    x: number;
+    y: number;
+  };
+  frontWheelAnchor: {
+    x: number;
+    y: number;
+  };
+  rearShockFrameAnchor: {
+    x: number;
+    y: number;
+  };
+  rearShockSwingarmAnchor: {
+    x: number;
+    y: number;
+  };
+  frontSliderBase: {
+    x: number;
+    y: number;
+  };
+  frontSliderCurrent: {
+    x: number;
+    y: number;
+  };
+  frontAxleMin: {
+    x: number;
+    y: number;
+  };
+  frontAxleMax: {
+    x: number;
+    y: number;
+  };
+  rearAxleMinObserved: {
+    x: number;
+    y: number;
+  };
+  rearAxleMaxObserved: {
+    x: number;
+    y: number;
+  };
+}
+
+export interface BikeState {
+  framePosition: {
+    x: number;
+    y: number;
+  };
+  frameVelocity: {
+    x: number;
+    y: number;
+  };
+  frameAngle: number;
+  frameAngularVelocity: number;
+  rearWheelSpeed: number;
+  frontWheelSpeed: number;
+  riderShift: number;
+  frontSuspensionTravel: number;
+  frontSuspensionMinTravel: number;
+  frontSuspensionMaxTravel: number;
+  frontSpringLength: number;
+  frontSpringRestLength: number;
+  frontLimitState: string;
+  rearSuspensionTravel: number;
+  rearSuspensionMinTravel: number;
+  rearSuspensionMaxTravel: number;
+  rearSpringLength: number;
+  rearSpringRestLength: number;
+  rearLimitState: string;
+  rearSwingarmAngle: number;
+  rearSwingarmLowerAngle: number;
+  rearSwingarmUpperAngle: number;
+}
+
+export interface Bike {
+  applyControls(controls: BikeControls): void;
+  applyDebugRig(timeSeconds: number): void;
+  captureDebugState(): void;
+  getRenderState(): BikeRenderState;
+  getState(): BikeState;
+}
+
+interface SpringDamper {
+  joint: planck.PrismaticJoint;
+  stiffness: number;
+  damping: number;
+  restOffset: number;
+  responseSpeed: number;
+  maxMotorSpeed: number;
+  maxMotorForce: number;
+}
+
+interface BikeOptions {
+  testRigMode: boolean;
+}
+
+export function createBike(world: planck.World, tuning: BikeTuning, options: BikeOptions): Bike {
+  const spawn = planck.Vec2(tuning.spawn.x, options.testRigMode ? tuning.debugRig.frameHeight : tuning.spawn.y);
+  const forkAxis = normalizeVec2(planck.Vec2(tuning.fork.sliderAxisX, tuning.fork.sliderAxisY));
+  const frame = options.testRigMode ? world.createBody({
+    position: spawn,
+    angle: tuning.spawn.angle,
+  }) : world.createDynamicBody({
+    position: spawn,
+    angle: tuning.spawn.angle,
+    linearDamping: tuning.frame.linearDamping,
+    angularDamping: tuning.frame.angularDamping,
+  });
+
+  frame.createFixture(planck.Box(tuning.frame.width * 0.5, tuning.frame.height * 0.5), {
+    density: tuning.frame.density,
+    friction: tuning.frame.friction,
+    filterGroupIndex: tuning.collisionGroup,
+  });
+
+  const rearPivotWorld = frame.getWorldPoint(planck.Vec2(tuning.swingarm.pivotOffsetX, tuning.swingarm.pivotOffsetY));
+  const frontPivotWorld = frame.getWorldPoint(planck.Vec2(tuning.fork.mountOffsetX, tuning.fork.mountOffsetY));
+  const riderMountWorld = frame.getWorldPoint(planck.Vec2(tuning.rider.mountOffsetX, tuning.rider.mountOffsetY));
+
+  const swingarm = world.createDynamicBody({
+    position: rearPivotWorld.clone(),
+    angle: tuning.spawn.angle,
+    angularDamping: tuning.swingarm.angularDamping,
+  });
+
+  swingarm.createFixture(
+    planck.Box(
+      tuning.swingarm.length * 0.5,
+      tuning.swingarm.height * 0.5,
+      planck.Vec2(tuning.swingarm.wheelMountOffsetX * 0.5, 0),
+      0,
+    ),
+    {
+      density: tuning.swingarm.density,
+      friction: tuning.swingarm.friction,
+      filterGroupIndex: tuning.collisionGroup,
+    },
+  );
+
+  const fork = world.createDynamicBody({
+    position: planck.Vec2(
+      frontPivotWorld.x + forkAxis.x * tuning.frontSuspension.restOffset,
+      frontPivotWorld.y + forkAxis.y * tuning.frontSuspension.restOffset,
+    ),
+    angle: tuning.spawn.angle,
+    angularDamping: tuning.fork.angularDamping,
+  });
+
+  fork.createFixture(
+    planck.Box(
+      tuning.fork.width * 0.5,
+      tuning.fork.height * 0.5,
+      planck.Vec2(0, -tuning.fork.height * 0.18),
+      0,
+    ),
+    {
+      density: tuning.fork.density,
+      friction: tuning.fork.friction,
+      filterGroupIndex: tuning.collisionGroup,
+    },
+  );
+
+  const rearWheel = world.createDynamicBody({
+    position: swingarm.getWorldPoint(planck.Vec2(tuning.swingarm.wheelMountOffsetX, tuning.swingarm.wheelMountOffsetY - tuning.rearWheel.radius)),
+    linearDamping: tuning.rearWheel.linearDamping,
+    angularDamping: tuning.rearWheel.angularDamping,
+  });
+
+  rearWheel.createFixture(planck.Circle(tuning.rearWheel.radius), {
+    density: tuning.rearWheel.density,
+    friction: tuning.rearWheel.friction,
+    restitution: tuning.rearWheel.restitution,
+    filterGroupIndex: tuning.collisionGroup,
+  });
+
+  const frontWheel = world.createDynamicBody({
+    position: fork.getWorldPoint(planck.Vec2(tuning.fork.lowerMountOffsetX, tuning.fork.lowerMountOffsetY)),
+    linearDamping: tuning.frontWheel.linearDamping,
+    angularDamping: tuning.frontWheel.angularDamping,
+  });
+
+  frontWheel.createFixture(planck.Circle(tuning.frontWheel.radius), {
+    density: tuning.frontWheel.density,
+    friction: tuning.frontWheel.friction,
+    restitution: tuning.frontWheel.restitution,
+    filterGroupIndex: tuning.collisionGroup,
+  });
+
+  const rider = world.createDynamicBody({
+    position: riderMountWorld,
+    angularDamping: 1.4,
+    linearDamping: 0.2,
+  });
+
+  rider.createFixture(planck.Circle(tuning.rider.radius), {
+    density: tuning.rider.density,
+    friction: tuning.rider.friction,
+    filterGroupIndex: tuning.collisionGroup,
+  });
+
+  const swingarmPivotJoint = world.createJoint(
+    planck.RevoluteJoint(
+      {
+        collideConnected: false,
+        enableLimit: true,
+        lowerAngle: tuning.rearSuspension.lowerSwingarmAngle,
+        upperAngle: tuning.rearSuspension.upperSwingarmAngle,
+      },
+      frame,
+      swingarm,
+      rearPivotWorld,
+    ),
+  ) as planck.RevoluteJoint;
+
+  const rearWheelJoint = world.createJoint(
+    planck.RevoluteJoint(
+      {
+        collideConnected: false,
+        enableMotor: true,
+        motorSpeed: 0,
+        maxMotorTorque: 0,
+      },
+      swingarm,
+      rearWheel,
+      rearWheel.getPosition(),
+    ),
+  ) as planck.RevoluteJoint;
+
+  const frontWheelJoint = world.createJoint(
+    planck.RevoluteJoint(
+      {
+        collideConnected: false,
+        enableMotor: true,
+        motorSpeed: 0,
+        maxMotorTorque: 0,
+      },
+      fork,
+      frontWheel,
+      frontWheel.getPosition(),
+    ),
+  ) as planck.RevoluteJoint;
+
+  const rearShockJoint = world.createJoint(
+    planck.DistanceJoint(
+      {
+        collideConnected: false,
+        frequencyHz: tuning.rearSuspension.frequencyHz,
+        dampingRatio: tuning.rearSuspension.dampingRatio,
+      },
+      frame,
+      swingarm,
+      frame.getWorldPoint(planck.Vec2(tuning.rearSuspension.frameAnchorX, tuning.rearSuspension.frameAnchorY)),
+      swingarm.getWorldPoint(planck.Vec2(tuning.swingarm.shockMountOffsetX, tuning.swingarm.shockMountOffsetY)),
+    ),
+  ) as planck.DistanceJoint;
+
+  const forkSliderJoint = world.createJoint(
+    planck.PrismaticJoint(
+      {
+        collideConnected: false,
+        enableLimit: true,
+        lowerTranslation: 0,
+        upperTranslation: tuning.fork.travel,
+      },
+      frame,
+      fork,
+      frontPivotWorld,
+      forkAxis,
+    ),
+  ) as planck.PrismaticJoint;
+
+  const riderJoint = world.createJoint(
+    planck.PrismaticJoint(
+      {
+        collideConnected: false,
+        enableLimit: true,
+        lowerTranslation: -tuning.rider.shiftRange,
+        upperTranslation: tuning.rider.shiftRange,
+        enableMotor: true,
+        maxMotorForce: tuning.rider.maxMotorForce,
+        motorSpeed: 0,
+      },
+      frame,
+      rider,
+      riderMountWorld,
+      planck.Vec2(1, 0),
+    ),
+  ) as planck.PrismaticJoint;
+
+  const frontSpring: SpringDamper = {
+    joint: forkSliderJoint,
+    stiffness: tuning.frontSuspension.springStrength,
+    damping: tuning.frontSuspension.damping,
+    restOffset: tuning.frontSuspension.restOffset,
+    responseSpeed: tuning.frontSuspension.responseSpeed,
+    maxMotorSpeed: tuning.frontSuspension.maxMotorSpeed,
+    maxMotorForce: tuning.frontSuspension.maxMotorForce,
+  };
+
+  const frontTravelMin = forkSliderJoint.getLowerLimit();
+  const frontTravelMax = forkSliderJoint.getUpperLimit();
+  const rearSpringRestLength = rearShockJoint.getLength();
+  let rearTravelMinObserved = 0;
+  let rearTravelMaxObserved = 0;
+  let rearAxleMinObserved = serializeVec2(rearWheel.getPosition());
+  let rearAxleMaxObserved = serializeVec2(rearWheel.getPosition());
+
+  captureDebugState();
+
+  return {
+    applyControls(controls) {
+      const rearMotorSpeed = controls.throttle > 0 ? tuning.controls.throttleMotorSpeed : 0;
+      const rearMotorTorque =
+        controls.throttle > 0
+          ? tuning.controls.rearDriveTorque
+          : controls.brakeRear > 0
+            ? tuning.controls.rearBrakeTorque
+            : tuning.controls.idleBrakeTorque;
+
+      rearWheelJoint.enableMotor(true);
+      rearWheelJoint.setMotorSpeed(rearMotorSpeed);
+      rearWheelJoint.setMaxMotorTorque(rearMotorTorque);
+
+      frontWheelJoint.enableMotor(true);
+      frontWheelJoint.setMotorSpeed(0);
+      frontWheelJoint.setMaxMotorTorque(controls.brakeFront > 0 ? tuning.controls.frontBrakeTorque : 0.6);
+
+      const targetShift = controls.riderShift * tuning.rider.shiftRange * tuning.controls.shiftResponsiveness;
+      const riderError = targetShift - riderJoint.getJointTranslation();
+      const riderSpeed = clamp(riderError * 10, -tuning.rider.maxShiftSpeed, tuning.rider.maxShiftSpeed);
+
+      riderJoint.setMaxMotorForce(tuning.rider.maxMotorForce);
+      riderJoint.setMotorSpeed(riderSpeed);
+
+      applyPrismaticSpringDamper(frontSpring);
+    },
+    applyDebugRig(timeSeconds) {
+      if (!options.testRigMode) {
+        return;
+      }
+
+      const sweep = Math.sin(timeSeconds * Math.PI * 2 * tuning.debugRig.sweepFrequencyHz);
+      const rearForce = planck.Vec2(0, sweep * tuning.debugRig.rearSweepForce);
+      const frontForce = planck.Vec2(0, -sweep * tuning.debugRig.frontSweepForce);
+
+      rearWheel.applyForceToCenter(rearForce, true);
+      frontWheel.applyForceToCenter(frontForce, true);
+    },
+    captureDebugState,
+    getRenderState() {
+      const rearWheelAnchor = serializeVec2(rearWheelJoint.getAnchorA());
+      const frontWheelAnchor = serializeVec2(frontWheelJoint.getAnchorA());
+      const rearShockFrameAnchor = serializeVec2(rearShockJoint.getAnchorA());
+      const rearShockSwingarmAnchor = serializeVec2(rearShockJoint.getAnchorB());
+      const frontSliderBase = serializeVec2(frame.getWorldPoint(planck.Vec2(tuning.fork.mountOffsetX, tuning.fork.mountOffsetY)));
+      const frontSliderCurrent = offsetPointAlongAxis(frontSliderBase, forkAxis, forkSliderJoint.getJointTranslation());
+      const frontAxleCurrent = serializeVec2(frontWheel.getPosition());
+
+      return {
+        frame: serializeBody(frame),
+        swingarm: serializeBody(swingarm),
+        fork: serializeBody(fork),
+        rider: {
+          ...serializeBody(rider),
+          radius: tuning.rider.radius,
+        },
+        rearWheel: {
+          ...serializeBody(rearWheel),
+          radius: tuning.rearWheel.radius,
+        },
+        frontWheel: {
+          ...serializeBody(frontWheel),
+          radius: tuning.frontWheel.radius,
+        },
+        frameRearPivot: serializeVec2(frame.getWorldPoint(planck.Vec2(tuning.swingarm.pivotOffsetX, tuning.swingarm.pivotOffsetY))),
+        frameFrontPivot: serializeVec2(frame.getWorldPoint(planck.Vec2(tuning.fork.mountOffsetX, tuning.fork.mountOffsetY))),
+        swingarmRearAxle: serializeVec2(
+          swingarm.getWorldPoint(planck.Vec2(tuning.swingarm.wheelMountOffsetX, tuning.swingarm.wheelMountOffsetY)),
+        ),
+        forkFrontAxle: serializeVec2(fork.getWorldPoint(planck.Vec2(tuning.fork.lowerMountOffsetX, tuning.fork.lowerMountOffsetY))),
+        rearWheelAnchor,
+        frontWheelAnchor,
+        rearShockFrameAnchor,
+        rearShockSwingarmAnchor,
+        frontSliderBase,
+        frontSliderCurrent,
+        frontAxleMin: offsetPointAlongAxis(frontAxleCurrent, forkAxis, frontTravelMin - forkSliderJoint.getJointTranslation()),
+        frontAxleMax: offsetPointAlongAxis(frontAxleCurrent, forkAxis, frontTravelMax - forkSliderJoint.getJointTranslation()),
+        rearAxleMinObserved,
+        rearAxleMaxObserved,
+      };
+    },
+    getState() {
+      const frontTravel = forkSliderJoint.getJointTranslation();
+      const rearSpringLength = getPointDistance(rearShockJoint.getAnchorA(), rearShockJoint.getAnchorB());
+      const rearTravel = rearSpringRestLength - rearSpringLength;
+
+      return {
+        framePosition: serializeVec2(frame.getPosition()),
+        frameVelocity: serializeVec2(frame.getLinearVelocity()),
+        frameAngle: frame.getAngle(),
+        frameAngularVelocity: frame.getAngularVelocity(),
+        rearWheelSpeed: rearWheel.getAngularVelocity(),
+        frontWheelSpeed: frontWheel.getAngularVelocity(),
+        riderShift: riderJoint.getJointTranslation(),
+        frontSuspensionTravel: frontTravel,
+        frontSuspensionMinTravel: frontTravelMin,
+        frontSuspensionMaxTravel: frontTravelMax,
+        frontSpringLength: frontTravel,
+        frontSpringRestLength: tuning.frontSuspension.restOffset,
+        frontLimitState: getPrismaticLimitStateName(forkSliderJoint),
+        rearSuspensionTravel: rearTravel,
+        rearSuspensionMinTravel: rearTravelMinObserved,
+        rearSuspensionMaxTravel: rearTravelMaxObserved,
+        rearSpringLength,
+        rearSpringRestLength,
+        rearLimitState: getRevoluteLimitStateName(swingarmPivotJoint),
+        rearSwingarmAngle: swingarmPivotJoint.getJointAngle(),
+        rearSwingarmLowerAngle: tuning.rearSuspension.lowerSwingarmAngle,
+        rearSwingarmUpperAngle: tuning.rearSuspension.upperSwingarmAngle,
+      };
+    },
+  };
+
+  function captureDebugState() {
+    const rearSpringLength = getPointDistance(rearShockJoint.getAnchorA(), rearShockJoint.getAnchorB());
+    const rearTravel = rearSpringRestLength - rearSpringLength;
+
+    rearTravelMinObserved = Math.min(rearTravelMinObserved, rearTravel);
+    rearTravelMaxObserved = Math.max(rearTravelMaxObserved, rearTravel);
+
+    if (rearTravel === rearTravelMinObserved) {
+      rearAxleMinObserved = serializeVec2(rearWheel.getPosition());
+    }
+
+    if (rearTravel === rearTravelMaxObserved) {
+      rearAxleMaxObserved = serializeVec2(rearWheel.getPosition());
+    }
+  }
+}
+
+function applyPrismaticSpringDamper(spring: SpringDamper) {
+  const translation = spring.joint.getJointTranslation();
+  const speed = spring.joint.getJointSpeed();
+  const positionError = spring.restOffset - translation;
+  const targetSpeed = clamp(positionError * spring.responseSpeed - speed * 0.35, -spring.maxMotorSpeed, spring.maxMotorSpeed);
+  const requestedForce = Math.abs(positionError * spring.stiffness - speed * spring.damping);
+  const maxForce = clamp(requestedForce, 0, spring.maxMotorForce);
+
+  spring.joint.enableMotor(true);
+  spring.joint.setMotorSpeed(targetSpeed);
+  spring.joint.setMaxMotorForce(maxForce);
+}
+
+function serializeBody(body: planck.Body): BikeRenderBody {
+  return {
+    position: serializeVec2(body.getPosition()),
+    angle: body.getAngle(),
+  };
+}
+
+function serializeVec2(vector: planck.Vec2): { x: number; y: number } {
+  return {
+    x: vector.x,
+    y: vector.y,
+  };
+}
+
+function offsetPointAlongAxis(point: { x: number; y: number }, axis: planck.Vec2, distance: number): { x: number; y: number } {
+  return {
+    x: point.x + axis.x * distance,
+    y: point.y + axis.y * distance,
+  };
+}
+
+function getPointDistance(pointA: planck.Vec2, pointB: planck.Vec2): number {
+  return Math.hypot(pointA.x - pointB.x, pointA.y - pointB.y);
+}
+
+function getPrismaticLimitStateName(joint: planck.PrismaticJoint): string {
+  const translation = joint.getJointTranslation();
+  const lower = joint.getLowerLimit();
+  const upper = joint.getUpperLimit();
+  const epsilon = 0.001;
+
+  if (Math.abs(translation - lower) < epsilon) {
+    return 'lower';
+  }
+
+  if (Math.abs(translation - upper) < epsilon) {
+    return 'upper';
+  }
+
+  return 'free';
+}
+
+function getRevoluteLimitStateName(joint: planck.RevoluteJoint): string {
+  const angle = joint.getJointAngle();
+  const lower = joint.getLowerLimit();
+  const upper = joint.getUpperLimit();
+  const epsilon = 0.001;
+
+  if (Math.abs(angle - lower) < epsilon) {
+    return 'lower';
+  }
+
+  if (Math.abs(angle - upper) < epsilon) {
+    return 'upper';
+  }
+
+  return 'free';
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeVec2(vector: planck.Vec2): planck.Vec2 {
+  const length = Math.hypot(vector.x, vector.y) || 1;
+  return planck.Vec2(vector.x / length, vector.y / length);
+}
