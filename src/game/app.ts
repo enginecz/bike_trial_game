@@ -21,6 +21,7 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
   const physics = createPhysicsSimulation(level, session.bikeTuning);
   const renderer = createRenderer(canvas);
   const debugOverlay = createDebugOverlay();
+  let activeSpawnName = 'Main Spawn';
   let paused = false;
   let suspensionDebugEnabled = false;
   let terrainDebugEnabled = false;
@@ -31,7 +32,7 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
     maxFrameTimeMs: 250,
     update(deltaTimeSeconds) {
       input.update();
-      const controls = readBikeControls(input);
+      const controls = readBikeControls(input, level.testSpawns.length);
 
       if (controls.pausePressed) {
         paused = !paused;
@@ -59,6 +60,22 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
 
       if (controls.zoomResetPressed) {
         inspectionZoom = 1;
+      }
+
+      if (controls.testSpawnSelection !== null) {
+        if (controls.testSpawnSelection === 1) {
+          activeSpawnName = '1 Main Spawn';
+          physics.setSpawn(level.spawn);
+          physics.reset();
+        }
+
+        const selectedSpawn = level.testSpawns.find((spawn) => spawn.key === controls.testSpawnSelection);
+
+        if (selectedSpawn) {
+          activeSpawnName = `${selectedSpawn.key} ${selectedSpawn.name}`;
+          physics.setSpawn(selectedSpawn.position);
+          physics.reset();
+        }
       }
 
       if (controls.resetPressed) {
@@ -92,6 +109,7 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
       debugOverlay.setLines(
         createDebugHudLines(
           {
+            activeSpawnName,
             camera,
             controls,
             inputSummary: input.describeActiveKeys(),

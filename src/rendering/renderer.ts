@@ -148,6 +148,13 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     context.arc(scene.level.spawn.x, scene.level.spawn.y, screenPixelsToWorld(scene.camera, 6), 0, Math.PI * 2);
     context.fill();
 
+    scene.level.testSpawns.forEach((spawn) => {
+      context.fillStyle = '#ffd166';
+      context.beginPath();
+      context.arc(spawn.position.x, spawn.position.y, screenPixelsToWorld(scene.camera, 6), 0, Math.PI * 2);
+      context.fill();
+    });
+
     context.restore();
   }
 

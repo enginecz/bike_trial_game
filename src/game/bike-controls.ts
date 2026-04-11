@@ -14,9 +14,10 @@ export interface BikeControls {
   zoomResetPressed: boolean;
   pausePressed: boolean;
   resetPressed: boolean;
+  testSpawnSelection: number | null;
 }
 
-export function readBikeControls(input: KeyboardInput): BikeControls {
+export function readBikeControls(input: KeyboardInput, testSpawnCount = 0): BikeControls {
   const throttle = input.isPressed('ArrowUp') ? 1 : 0;
   const riderShift = (input.isPressed('ArrowRight') ? 1 : 0) - (input.isPressed('ArrowLeft') ? 1 : 0);
   const brakeRear = input.isPressed('ArrowDown') ? 1 : 0;
@@ -36,5 +37,6 @@ export function readBikeControls(input: KeyboardInput): BikeControls {
     zoomResetPressed: input.consumePressed('Digit0'),
     pausePressed: input.consumePressed('KeyP'),
     resetPressed: input.consumePressed('KeyR'),
+    testSpawnSelection: testSpawnCount > 0 ? input.consumeDigitSelection(testSpawnCount) : null,
   };
 }

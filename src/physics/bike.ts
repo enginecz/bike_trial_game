@@ -1,6 +1,7 @@
 import * as planck from 'planck-js';
 import type { BikeControls } from '../game/bike-controls';
 import type { BikeTuning } from '../tuning/bike';
+import type { LevelPoint } from '../world/level';
 
 export interface BikeRenderBody {
   position: {
@@ -140,17 +141,18 @@ interface SpringDamper {
 
 interface BikeOptions {
   testRigMode: boolean;
+  spawn: LevelPoint;
 }
 
 export function createBike(world: planck.World, tuning: BikeTuning, options: BikeOptions): Bike {
-  const spawn = planck.Vec2(tuning.spawn.x, options.testRigMode ? tuning.debugRig.frameHeight : tuning.spawn.y);
+  const spawn = planck.Vec2(options.spawn.x, options.testRigMode ? tuning.debugRig.frameHeight : options.spawn.y);
   const forkAxis = normalizeVec2(planck.Vec2(tuning.fork.sliderAxisX, tuning.fork.sliderAxisY));
   const frame = options.testRigMode ? world.createBody({
     position: spawn,
-    angle: tuning.spawn.angle,
+    angle: tuning.initialPose.angle,
   }) : world.createDynamicBody({
     position: spawn,
-    angle: tuning.spawn.angle,
+    angle: tuning.initialPose.angle,
     linearDamping: tuning.frame.linearDamping,
     angularDamping: tuning.frame.angularDamping,
   });
@@ -167,7 +169,7 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
 
   const swingarm = world.createDynamicBody({
     position: rearPivotWorld.clone(),
-    angle: tuning.spawn.angle,
+    angle: tuning.initialPose.angle,
     angularDamping: tuning.swingarm.angularDamping,
   });
 
@@ -190,7 +192,7 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
       frontPivotWorld.x + forkAxis.x * tuning.frontSuspension.restOffset,
       frontPivotWorld.y + forkAxis.y * tuning.frontSuspension.restOffset,
     ),
-    angle: tuning.spawn.angle,
+    angle: tuning.initialPose.angle,
     angularDamping: tuning.fork.angularDamping,
   });
 

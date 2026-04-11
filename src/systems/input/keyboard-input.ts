@@ -12,6 +12,11 @@ const trackedKeys = [
   'KeyR',
   'KeyT',
   'Digit0',
+  'Digit1',
+  'Digit2',
+  'Digit3',
+  'Digit4',
+  'Digit5',
   'Equal',
   'Minus',
   'Space',
@@ -23,6 +28,7 @@ export interface KeyboardInput {
   update(): void;
   isPressed(code: TrackedKey): boolean;
   consumePressed(code: TrackedKey): boolean;
+  consumeDigitSelection(maxDigit: number): number | null;
   describeActiveKeys(): string;
 }
 
@@ -61,6 +67,20 @@ export function createKeyboardInput(target: Window): KeyboardInput {
 
       justPressedKeys.delete(code);
       return true;
+    },
+    consumeDigitSelection(maxDigit) {
+      for (let digit = 1; digit <= maxDigit; digit += 1) {
+        const code = `Digit${digit}` as TrackedKey;
+
+        if (!justPressedKeys.has(code)) {
+          continue;
+        }
+
+        justPressedKeys.delete(code);
+        return digit;
+      }
+
+      return null;
     },
     describeActiveKeys() {
       return trackedKeys.filter((code) => pressedKeys.has(code)).join(', ');

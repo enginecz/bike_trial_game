@@ -13,9 +13,7 @@ export interface BikeTuning {
     rearSweepForce: number;
     sweepFrequencyHz: number;
   };
-  spawn: {
-    x: number;
-    y: number;
+  initialPose: {
     angle: number;
   };
   frame: {
@@ -121,9 +119,7 @@ export const bikeTuning: BikeTuning = {
     rearSweepForce: 180,
     sweepFrequencyHz: 0.18,
   },
-  spawn: {
-    x: -16,
-    y: 3.25,
+  initialPose: {
     angle: 0,
   },
   frame: {

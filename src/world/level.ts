@@ -8,10 +8,18 @@ export interface LevelChainDefinition {
   points: LevelPoint[];
 }
 
+export interface LevelTestSpawnDefinition {
+  id: string;
+  name: string;
+  key: number;
+  position: LevelPoint;
+}
+
 export interface LevelDefinition {
   id: string;
   name: string;
   spawn: LevelPoint;
+  testSpawns: LevelTestSpawnDefinition[];
   collisionChains: LevelChainDefinition[];
 }
 
@@ -24,10 +32,13 @@ export interface LevelChain extends LevelChainDefinition {
   segments: TerrainSegment[];
 }
 
+export interface LevelTestSpawn extends LevelTestSpawnDefinition {}
+
 export interface Level {
   id: string;
   name: string;
   spawn: LevelPoint;
+  testSpawns: LevelTestSpawn[];
   collisionChains: LevelChain[];
   segmentCount: number;
 }
@@ -44,6 +55,7 @@ export function createLevel(definition: LevelDefinition): Level {
     id: definition.id,
     name: definition.name,
     spawn: definition.spawn,
+    testSpawns: definition.testSpawns,
     collisionChains,
     segmentCount,
   };

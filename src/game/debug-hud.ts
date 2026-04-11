@@ -13,6 +13,7 @@ export interface OverlayLegendEntry {
 export interface DebugHudState {
   camera: Camera;
   controls: BikeControls;
+  activeSpawnName: string;
   inputSummary: string;
   level: Level;
   paused: boolean;
@@ -33,9 +34,11 @@ export function createDebugHudLines(state: DebugHudState, tuning: BikeTuning): s
     'Ride Controls',
     'Up throttle | Down rear brake | A/Space front brake | Left/Right rider shift',
     'Debug / General',
-    'R reset | O bike overlay | G terrain overlay | T test rig | P pause | N single-step',
+    'R reset | 1 main spawn | 2-5 test spawns | O bike overlay | G terrain overlay | T test rig | P pause | N single-step',
     'View',
     '- zoom out | = zoom in | 0 reset zoom',
+    `Active spawn: ${state.activeSpawnName}`,
+    `Test spawns: ${state.level.testSpawns.map((spawn) => `${spawn.key} ${spawn.name}`).join(' | ') || 'none'}`,
     `Input: ${state.inputSummary || 'none'}`,
     `Throttle: ${state.controls.throttle.toFixed(0)}  Front brake: ${state.controls.brakeFront.toFixed(0)}  Rear brake: ${state.controls.brakeRear.toFixed(0)}`,
     `Rider shift: ${state.controls.riderShift.toFixed(0)}  Reset: ${state.controls.resetPressed ? 'yes' : 'no'}`,
@@ -81,6 +84,6 @@ export function createTerrainLegendEntries(): OverlayLegendEntry[] {
     { color: '#f0f0f0', label: 'terrain collision chain' },
     { color: '#4cc9f0', label: 'terrain segment reference lines' },
     { color: '#8ae6c1', label: 'terrain chain vertices' },
-    { color: '#ffd166', label: 'spawn marker' },
+    { color: '#ffd166', label: 'spawn and test-spawn markers' },
   ];
 }
