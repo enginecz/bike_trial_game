@@ -1,7 +1,7 @@
 import { createFixedStepLoop } from '../core/fixed-step-loop';
 import { readBikeControls } from './bike-controls';
 import { createDebugHudLines, createOverlayLegendEntries, createTerrainLegendEntries } from './debug-hud';
-import { defaultGameSessionConfig } from './session-config';
+import { defaultGameSessionConfig, getDefaultBikeDefinition } from './session-config';
 import { createPhysicsSimulation } from '../physics/simulation';
 import { createCamera } from '../rendering/camera';
 import { createDebugOverlay } from '../rendering/debug-overlay';
@@ -18,7 +18,13 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
   const input = createKeyboardInput(window);
   const camera = createCamera();
   const level = createLevel(session.levelDefinition);
-  const physics = createPhysicsSimulation(level, session.bikeTuning);
+  let activeBike = getDefaultBikeDefinition(session);
+  let activeBikeIndex = Math.max(
+    0,
+    session.availableBikes.findIndex((bike) => bike.id === activeBike.id),
+  );
+  let activeSpawn = level.spawn;
+  let physics = createPhysicsSimulation(level, activeBike.tuning);
   const renderer = createRenderer(canvas);
   const debugOverlay = createDebugOverlay();
   let activeSpawnName = 'Main Spawn';
@@ -26,6 +32,18 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
   let suspensionDebugEnabled = false;
   let terrainDebugEnabled = false;
   let inspectionZoom = 1;
+
+  function rebuildPhysics() {
+    const preserveTestRigMode = physics.isTestRigMode();
+
+    physics = createPhysicsSimulation(level, activeBike.tuning);
+    physics.setSpawn(activeSpawn);
+    physics.reset();
+
+    if (preserveTestRigMode) {
+      physics.toggleTestRigMode();
+    }
+  }
 
   const loop = createFixedStepLoop({
     fixedDeltaTimeMs: 1000 / 60,
@@ -50,6 +68,12 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
         physics.toggleTestRigMode();
       }
 
+      if (controls.nextBikePressed) {
+        activeBikeIndex = (activeBikeIndex + 1) % session.availableBikes.length;
+        activeBike = session.availableBikes[activeBikeIndex];
+        rebuildPhysics();
+      }
+
       if (controls.zoomInPressed) {
         inspectionZoom = clamp(inspectionZoom * 1.15, 0.5, 3);
       }
@@ -65,7 +89,8 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
       if (controls.testSpawnSelection !== null) {
         if (controls.testSpawnSelection === 1) {
           activeSpawnName = '1 Main Spawn';
-          physics.setSpawn(level.spawn);
+          activeSpawn = level.spawn;
+          physics.setSpawn(activeSpawn);
           physics.reset();
         }
 
@@ -73,7 +98,8 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
 
         if (selectedSpawn) {
           activeSpawnName = `${selectedSpawn.key} ${selectedSpawn.name}`;
-          physics.setSpawn(selectedSpawn.position);
+          activeSpawn = selectedSpawn.position;
+          physics.setSpawn(activeSpawn);
           physics.reset();
         }
       }
@@ -110,6 +136,7 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
         createDebugHudLines(
           {
             activeSpawnName,
+            activeBike,
             camera,
             controls,
             inputSummary: input.describeActiveKeys(),
@@ -120,13 +147,14 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
             terrainDebugEnabled,
             testRigMode: physics.isTestRigMode(),
           },
-          session.bikeTuning,
+          activeBike.tuning,
         ),
       );
     },
     render() {
       renderer.resize();
       renderer.render({
+        activeBike,
         camera,
         debugLines: debugOverlay.getLines(),
         level,

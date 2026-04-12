@@ -4,6 +4,7 @@ const trackedKeys = [
   'ArrowUp',
   'ArrowDown',
   'KeyA',
+  'KeyB',
   'KeyD',
   'KeyG',
   'KeyN',

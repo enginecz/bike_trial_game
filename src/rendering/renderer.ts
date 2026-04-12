@@ -1,9 +1,13 @@
 import type { Camera } from './camera';
 import type { PhysicsRenderState } from '../physics/simulation';
+import type { BikeDefinition } from '../data/bikes';
+import type { BikeRenderBody } from '../physics/bike';
 import type { Level } from '../world/level';
 import type { OverlayLegendEntry } from '../game/debug-hud';
+import type { BikeLocalPoint, BikeRenderingBody } from '../data/bikes/shared';
 
 export interface RenderScene {
+  activeBike: BikeDefinition;
   camera: Camera;
   debugLines: string[];
   level: Level;
@@ -160,41 +164,111 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
 
   function drawBike(scene: RenderScene, width: number, height: number) {
     const { bike } = scene.physics;
+    const renderDefinition = scene.activeBike.rendering;
+    const frameOnly = renderDefinition?.frameOnly ?? false;
     const overlayMode = scene.suspensionDebugEnabled;
+    const showReferenceRendering = !overlayMode;
     const frameColor = overlayMode ? '#ffb703' : '#f6f6f6';
-    const swingarmColor = overlayMode ? '#ffd166' : '#f6f6f6';
-    const forkColor = overlayMode ? '#7bdff2' : '#f6f6f6';
-    const rearWheelColor = overlayMode ? '#a0e426' : '#f6f6f6';
-    const frontWheelColor = overlayMode ? '#c77dff' : '#f6f6f6';
-    const riderColor = overlayMode ? '#ff99c8' : '#f6f6f6';
+    const headAxisColor = overlayMode ? '#ffb703' : '#ffb703';
+    const swingarmColor = overlayMode ? '#ffd166' : '#ffd166';
+    const forkColor = overlayMode ? '#7bdff2' : '#7bdff2';
+    const rearWheelColor = overlayMode ? '#a0e426' : '#a0e426';
+    const frontWheelColor = overlayMode ? '#c77dff' : '#c77dff';
+    const riderColor = overlayMode ? '#ff99c8' : '#ff99c8';
 
     context.save();
     applyWorldTransform(scene.camera, width, height);
 
     context.lineWidth = screenPixelsToWorld(scene.camera, 2);
 
-    context.strokeStyle = rearWheelColor;
-    drawCircle(context, bike.rearWheel.position.x, bike.rearWheel.position.y, bike.rearWheel.radius, false);
-    context.strokeStyle = frontWheelColor;
-    drawCircle(context, bike.frontWheel.position.x, bike.frontWheel.position.y, bike.frontWheel.radius, false);
-    context.strokeStyle = riderColor;
-    drawCircle(context, bike.rider.position.x, bike.rider.position.y, bike.rider.radius, false);
+    if (showReferenceRendering && renderDefinition?.frameTriangle) {
+      context.strokeStyle = frameColor;
+      drawAttachedTriangle(context, bike, renderDefinition.frameTriangle.points, renderDefinition.frameTriangle.localTo);
+    } else if (!frameOnly) {
+      context.strokeStyle = frameColor;
+      drawLine(context, bike.frameRearPivot.x, bike.frameRearPivot.y, bike.frame.position.x, bike.frame.position.y);
+      drawLine(context, bike.frame.position.x, bike.frame.position.y, bike.frameFrontPivot.x, bike.frameFrontPivot.y);
+    }
 
-    context.strokeStyle = swingarmColor;
-    drawLine(context, bike.rearWheelAnchor.x, bike.rearWheelAnchor.y, bike.frameRearPivot.x, bike.frameRearPivot.y);
-    context.strokeStyle = frameColor;
-    drawLine(context, bike.frameRearPivot.x, bike.frameRearPivot.y, bike.frame.position.x, bike.frame.position.y);
-    drawLine(context, bike.frame.position.x, bike.frame.position.y, bike.frameFrontPivot.x, bike.frameFrontPivot.y);
-    context.strokeStyle = forkColor;
-    drawLine(context, bike.frameFrontPivot.x, bike.frameFrontPivot.y, bike.forkFrontAxle.x, bike.forkFrontAxle.y);
-    context.strokeStyle = riderColor;
-    drawLine(context, bike.frame.position.x, bike.frame.position.y, bike.rider.position.x, bike.rider.position.y);
+    if (showReferenceRendering && renderDefinition?.headAxisLine) {
+      const start = transformAttachedPoint(bike, renderDefinition.headAxisLine.start, renderDefinition.headAxisLine.startLocalTo);
+      const end = transformAttachedPoint(bike, renderDefinition.headAxisLine.end, renderDefinition.headAxisLine.endLocalTo);
+      context.strokeStyle = headAxisColor;
+      drawLine(context, start.x, start.y, end.x, end.y);
+    }
+
+    if (showReferenceRendering && renderDefinition?.forkTriangle) {
+      context.strokeStyle = forkColor;
+      drawAttachedTriangle(context, bike, renderDefinition.forkTriangle.points, renderDefinition.forkTriangle.localTo);
+    }
+
+    if (showReferenceRendering && renderDefinition?.frontWheelCircle) {
+      const wheelCenter = transformAttachedPoint(bike, renderDefinition.frontWheelCircle.center, renderDefinition.frontWheelCircle.localTo);
+      context.strokeStyle = frontWheelColor;
+      drawCircle(context, wheelCenter.x, wheelCenter.y, renderDefinition.frontWheelCircle.radius, false);
+    }
+
+    if (showReferenceRendering && renderDefinition?.swingarmTriangle) {
+      context.strokeStyle = swingarmColor;
+      drawAttachedTriangle(context, bike, renderDefinition.swingarmTriangle.points, renderDefinition.swingarmTriangle.localTo);
+    }
+
+    if (showReferenceRendering && renderDefinition?.rearWheelCircle) {
+      const wheelCenter = transformAttachedPoint(bike, renderDefinition.rearWheelCircle.center, renderDefinition.rearWheelCircle.localTo);
+      context.strokeStyle = rearWheelColor;
+      drawCircle(context, wheelCenter.x, wheelCenter.y, renderDefinition.rearWheelCircle.radius, false);
+    }
+
+    if (showReferenceRendering && renderDefinition?.riderTriangle) {
+      context.strokeStyle = riderColor;
+      drawAttachedTriangle(context, bike, renderDefinition.riderTriangle.points, renderDefinition.riderTriangle.localTo);
+    }
+
+    if (showReferenceRendering && renderDefinition?.shockLine) {
+      const start = transformAttachedPoint(bike, renderDefinition.shockLine.start, renderDefinition.shockLine.startLocalTo);
+      const end = transformAttachedPoint(bike, renderDefinition.shockLine.end, renderDefinition.shockLine.endLocalTo);
+      context.strokeStyle = '#ef476f';
+      drawLine(context, start.x, start.y, end.x, end.y);
+    }
+
+    if (showReferenceRendering && renderDefinition?.frontSuspensionLine) {
+      const start = transformAttachedPoint(
+        bike,
+        renderDefinition.frontSuspensionLine.start,
+        renderDefinition.frontSuspensionLine.startLocalTo,
+      );
+      const end = transformAttachedPoint(
+        bike,
+        renderDefinition.frontSuspensionLine.end,
+        renderDefinition.frontSuspensionLine.endLocalTo,
+      );
+      context.strokeStyle = '#ef476f';
+      drawLine(context, start.x, start.y, end.x, end.y);
+    }
+
+    if (!frameOnly) {
+      context.strokeStyle = rearWheelColor;
+      drawCircle(context, bike.rearWheel.position.x, bike.rearWheel.position.y, bike.rearWheel.radius, false);
+      context.strokeStyle = frontWheelColor;
+      drawCircle(context, bike.frontWheel.position.x, bike.frontWheel.position.y, bike.frontWheel.radius, false);
+      context.strokeStyle = riderColor;
+      drawCircle(context, bike.rider.position.x, bike.rider.position.y, bike.rider.radius, false);
+
+      context.strokeStyle = swingarmColor;
+      drawLine(context, bike.rearWheelAnchor.x, bike.rearWheelAnchor.y, bike.frameRearPivot.x, bike.frameRearPivot.y);
+      context.strokeStyle = forkColor;
+      drawLine(context, bike.frameFrontPivot.x, bike.frameFrontPivot.y, bike.forkFrontAxle.x, bike.forkFrontAxle.y);
+      context.strokeStyle = riderColor;
+      drawLine(context, bike.frame.position.x, bike.frame.position.y, bike.rider.position.x, bike.rider.position.y);
+    }
 
     if (overlayMode) {
       context.strokeStyle = '#bdb2ff';
       drawBodyAxis(context, bike.frame.position.x, bike.frame.position.y, bike.frame.angle, 0.7);
-      drawBodyAxis(context, bike.swingarm.position.x, bike.swingarm.position.y, bike.swingarm.angle, 0.45);
-      drawBodyAxis(context, bike.fork.position.x, bike.fork.position.y, bike.fork.angle, 0.55);
+      if (!frameOnly) {
+        drawBodyAxis(context, bike.swingarm.position.x, bike.swingarm.position.y, bike.swingarm.angle, 0.45);
+        drawBodyAxis(context, bike.fork.position.x, bike.fork.position.y, bike.fork.angle, 0.55);
+      }
     }
 
     context.restore();
@@ -206,6 +280,8 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     }
 
     const { bike } = scene.physics;
+    const renderDefinition = scene.activeBike.rendering;
+    const frameOnly = renderDefinition?.frameOnly ?? false;
 
     context.save();
     applyWorldTransform(scene.camera, width, height);
@@ -213,7 +289,11 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     context.lineWidth = screenPixelsToWorld(scene.camera, 2);
 
     context.strokeStyle = '#ffd166';
-    drawLine(context, bike.frameRearPivot.x, bike.frameRearPivot.y, bike.rearWheelAnchor.x, bike.rearWheelAnchor.y);
+    if (frameOnly) {
+      drawTriangleFromPoints(context, bike.frameRearPivot, bike.rearWheelAnchor, bike.rearShockSwingarmAnchor);
+    } else {
+      drawLine(context, bike.frameRearPivot.x, bike.frameRearPivot.y, bike.rearWheelAnchor.x, bike.rearWheelAnchor.y);
+    }
     drawLine(context, bike.frameFrontPivot.x, bike.frameFrontPivot.y, bike.frontSliderCurrent.x, bike.frontSliderCurrent.y);
     drawLine(context, bike.frontSliderCurrent.x, bike.frontSliderCurrent.y, bike.frontWheelAnchor.x, bike.frontWheelAnchor.y);
 
@@ -227,6 +307,10 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
 
     drawAnchorMarker(context, scene.camera, bike.rearWheel.position.x, bike.rearWheel.position.y, '#ffffff');
     drawAnchorMarker(context, scene.camera, bike.frontWheel.position.x, bike.frontWheel.position.y, '#ffffff');
+    drawAnchorMarker(context, scene.camera, bike.frame.position.x, bike.frame.position.y, '#ffb703');
+    drawAnchorMarker(context, scene.camera, bike.swingarm.position.x, bike.swingarm.position.y, '#ffd166');
+    drawAnchorMarker(context, scene.camera, bike.fork.position.x, bike.fork.position.y, '#7bdff2');
+    drawAnchorMarker(context, scene.camera, bike.rider.position.x, bike.rider.position.y, '#ff99c8');
     drawAnchorMarker(context, scene.camera, bike.frameRearPivot.x, bike.frameRearPivot.y, '#ffd166');
     drawAnchorMarker(context, scene.camera, bike.rearWheelAnchor.x, bike.rearWheelAnchor.y, '#ffd166');
     drawAnchorMarker(context, scene.camera, bike.frameFrontPivot.x, bike.frameFrontPivot.y, '#ffd166');
@@ -360,6 +444,91 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       drawTerrainLegend(scene.terrainDebugEnabled ? scene.terrainLegendEntries : [], width);
     },
   };
+}
+
+function drawFrameTriangle(
+  context: CanvasRenderingContext2D,
+  originX: number,
+  originY: number,
+  angle: number,
+  points: Array<{ x: number; y: number }>,
+) {
+  if (points.length < 3) {
+    return;
+  }
+
+  const transformedPoints = points.map((point) => rotateAndTranslatePoint(point.x, point.y, originX, originY, angle));
+
+  context.beginPath();
+  context.moveTo(transformedPoints[0].x, transformedPoints[0].y);
+
+  for (let index = 1; index < transformedPoints.length; index += 1) {
+    context.lineTo(transformedPoints[index].x, transformedPoints[index].y);
+  }
+
+  context.closePath();
+  context.stroke();
+}
+
+function drawAttachedTriangle(
+  context: CanvasRenderingContext2D,
+  bike: PhysicsRenderState['bike'],
+  points: BikeLocalPoint[],
+  localTo: BikeRenderingBody | undefined,
+) {
+  const body = getAttachedBody(bike, localTo);
+  drawFrameTriangle(context, body.position.x, body.position.y, body.angle, points);
+}
+
+function drawTriangleFromPoints(
+  context: CanvasRenderingContext2D,
+  pointA: { x: number; y: number },
+  pointB: { x: number; y: number },
+  pointC: { x: number; y: number },
+) {
+  context.beginPath();
+  context.moveTo(pointA.x, pointA.y);
+  context.lineTo(pointB.x, pointB.y);
+  context.lineTo(pointC.x, pointC.y);
+  context.closePath();
+  context.stroke();
+}
+
+function rotateAndTranslatePoint(localX: number, localY: number, originX: number, originY: number, angle: number) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+
+  return {
+    x: originX + localX * cos - localY * sin,
+    y: originY + localX * sin + localY * cos,
+  };
+}
+
+function transformAttachedPoint(
+  bike: PhysicsRenderState['bike'],
+  point: BikeLocalPoint,
+  localTo: BikeRenderingBody | undefined,
+) {
+  const body = getAttachedBody(bike, localTo);
+  return rotateAndTranslatePoint(point.x, point.y, body.position.x, body.position.y, body.angle);
+}
+
+function getAttachedBody(bike: PhysicsRenderState['bike'], localTo: BikeRenderingBody | undefined): BikeRenderBody {
+  switch (localTo) {
+    case 'swingarm':
+      return bike.swingarm;
+    case 'fork':
+      return bike.fork;
+    case 'rider':
+      return bike.rider;
+    case 'rearWheel':
+      return bike.rearWheel;
+    case 'frontWheel':
+      return bike.frontWheel;
+    case 'frame':
+    default:
+      return bike.frame;
+  }
 }
 
 function drawAnchorMarker(context: CanvasRenderingContext2D, camera: Camera, x: number, y: number, color: string) {

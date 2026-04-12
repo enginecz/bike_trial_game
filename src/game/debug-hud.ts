@@ -1,4 +1,5 @@
 import type { BikeControls } from './bike-controls';
+import type { BikeDefinition } from '../data/bikes';
 import type { Camera } from '../rendering/camera';
 import type { PhysicsSnapshot } from '../physics/simulation';
 import type { BikeTuning } from '../tuning/bike';
@@ -11,6 +12,7 @@ export interface OverlayLegendEntry {
 }
 
 export interface DebugHudState {
+  activeBike: BikeDefinition;
   camera: Camera;
   controls: BikeControls;
   activeSpawnName: string;
@@ -31,10 +33,11 @@ export function createDebugHudLines(state: DebugHudState, tuning: BikeTuning): s
     `State: ${state.paused ? 'paused' : 'running'}`,
     `Bike overlay: ${state.suspensionDebugEnabled ? 'on' : 'off'}  Terrain overlay: ${state.terrainDebugEnabled ? 'on' : 'off'}  Test rig: ${state.testRigMode ? 'on' : 'off'}`,
     'Prototype HUD',
+    `Bike: ${state.activeBike.name}`,
     'Ride Controls',
     'Up throttle | Down rear brake | A/Space front brake | Left/Right rider shift',
     'Debug / General',
-    'R reset | 1 main spawn | 2-5 test spawns | O bike overlay | G terrain overlay | T test rig | P pause | N single-step',
+    'B next bike | R reset | 1 main spawn | 2-5 test spawns | O bike overlay | G terrain overlay | T test rig | P pause | N single-step',
     'View',
     '- zoom out | = zoom in | 0 reset zoom',
     `Active spawn: ${state.activeSpawnName}`,

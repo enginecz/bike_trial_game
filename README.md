@@ -4,7 +4,7 @@ Browser-based 2D trials motorcycle physics prototype built with TypeScript, Vite
 
 ## Current Status
 
-The project currently runs as a playable desktop-browser prototype with core riding, terrain, camera, rendering, and debug overlays in place. It is still in progress and should be treated as a physics testbed, not a content-complete or polished release.
+The project currently runs as a playable desktop-browser prototype with core riding, terrain, camera, rendering, debug overlays, and multiple bike presets in place. It is still in progress and should be treated as a physics testbed, not a content-complete or polished release.
 
 ## Local Development
 
@@ -31,7 +31,7 @@ GitHub Pages deployment happens automatically on pushes to `master` through GitH
 
 ## Controls
 
-Controls are still evolving. The in-game legend and debug HUD are the current source of truth for keyboard input, debug toggles, reset behavior, pause, stepping, and zoom controls.
+Controls are still evolving. The in-game legend and debug HUD are the current source of truth for keyboard input, debug toggles, reset behavior, pause, stepping, zoom controls, and bike switching.
 
 ## Project Goal
 

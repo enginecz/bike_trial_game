@@ -12,6 +12,7 @@ export interface BikeControls {
   zoomInPressed: boolean;
   zoomOutPressed: boolean;
   zoomResetPressed: boolean;
+  nextBikePressed: boolean;
   pausePressed: boolean;
   resetPressed: boolean;
   testSpawnSelection: number | null;
@@ -35,6 +36,7 @@ export function readBikeControls(input: KeyboardInput, testSpawnCount = 0): Bike
     zoomInPressed: input.consumePressed('Equal'),
     zoomOutPressed: input.consumePressed('Minus'),
     zoomResetPressed: input.consumePressed('Digit0'),
+    nextBikePressed: input.consumePressed('KeyB'),
     pausePressed: input.consumePressed('KeyP'),
     resetPressed: input.consumePressed('KeyR'),
     testSpawnSelection: testSpawnCount > 0 ? input.consumeDigitSelection(testSpawnCount) : null,

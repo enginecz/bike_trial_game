@@ -145,23 +145,34 @@ interface BikeOptions {
 }
 
 export function createBike(world: planck.World, tuning: BikeTuning, options: BikeOptions): Bike {
-  const spawn = planck.Vec2(options.spawn.x, options.testRigMode ? tuning.debugRig.frameHeight : options.spawn.y);
+  const spawn = planck.Vec2(options.spawn.x, options.spawn.y);
+  const frameAngle = tuning.initialPose.angle;
+  const swingarmAngle = frameAngle + tuning.swingarm.initialAngle;
+  const forkAngle = frameAngle + tuning.fork.initialAngle;
   const forkAxis = normalizeVec2(planck.Vec2(tuning.fork.sliderAxisX, tuning.fork.sliderAxisY));
   const frame = options.testRigMode ? world.createBody({
     position: spawn,
-    angle: tuning.initialPose.angle,
+    angle: frameAngle,
   }) : world.createDynamicBody({
     position: spawn,
-    angle: tuning.initialPose.angle,
+    angle: frameAngle,
     linearDamping: tuning.frame.linearDamping,
     angularDamping: tuning.frame.angularDamping,
   });
 
-  frame.createFixture(planck.Box(tuning.frame.width * 0.5, tuning.frame.height * 0.5), {
-    density: tuning.frame.density,
-    friction: tuning.frame.friction,
-    filterGroupIndex: tuning.collisionGroup,
-  });
+  frame.createFixture(
+    planck.Box(
+      tuning.frame.width * 0.5,
+      tuning.frame.height * 0.5,
+      planck.Vec2(tuning.frame.centerOffsetX ?? 0, tuning.frame.centerOffsetY ?? 0),
+      0,
+    ),
+    {
+      density: tuning.frame.density,
+      friction: tuning.frame.friction,
+      filterGroupIndex: tuning.collisionGroup,
+    },
+  );
 
   const rearPivotWorld = frame.getWorldPoint(planck.Vec2(tuning.swingarm.pivotOffsetX, tuning.swingarm.pivotOffsetY));
   const frontPivotWorld = frame.getWorldPoint(planck.Vec2(tuning.fork.mountOffsetX, tuning.fork.mountOffsetY));
@@ -169,7 +180,7 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
 
   const swingarm = world.createDynamicBody({
     position: rearPivotWorld.clone(),
-    angle: tuning.initialPose.angle,
+    angle: swingarmAngle,
     angularDamping: tuning.swingarm.angularDamping,
   });
 
@@ -192,7 +203,7 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
       frontPivotWorld.x + forkAxis.x * tuning.frontSuspension.restOffset,
       frontPivotWorld.y + forkAxis.y * tuning.frontSuspension.restOffset,
     ),
-    angle: tuning.initialPose.angle,
+    angle: forkAngle,
     angularDamping: tuning.fork.angularDamping,
   });
 
@@ -211,7 +222,7 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
   );
 
   const rearWheel = world.createDynamicBody({
-    position: swingarm.getWorldPoint(planck.Vec2(tuning.swingarm.wheelMountOffsetX, tuning.swingarm.wheelMountOffsetY - tuning.rearWheel.radius)),
+    position: swingarm.getWorldPoint(planck.Vec2(tuning.swingarm.wheelMountOffsetX, tuning.swingarm.wheelMountOffsetY)),
     linearDamping: tuning.rearWheel.linearDamping,
     angularDamping: tuning.rearWheel.angularDamping,
   });
@@ -362,7 +373,7 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
       const rearMotorSpeed = controls.throttle > 0 ? tuning.controls.throttleMotorSpeed : 0;
       const rearMotorTorque =
         controls.throttle > 0
-          ? tuning.controls.rearDriveTorque
+          ? getRearDriveTorqueForCurrentSpeed()
           : controls.brakeRear > 0
             ? tuning.controls.rearBrakeTorque
             : tuning.controls.idleBrakeTorque;
@@ -407,7 +418,7 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
       const frontAxleCurrent = serializeVec2(frontWheel.getPosition());
       const rearAxleLocalOffset = {
         x: tuning.swingarm.wheelMountOffsetX,
-        y: tuning.swingarm.wheelMountOffsetY - tuning.rearWheel.radius,
+        y: tuning.swingarm.wheelMountOffsetY,
       };
       const rearAxleMinLimit = offsetPointWithAngle(
         serializeVec2(frame.getWorldPoint(planck.Vec2(tuning.swingarm.pivotOffsetX, tuning.swingarm.pivotOffsetY))),
@@ -502,6 +513,19 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
     if (rearTravel === rearTravelMaxObserved) {
       rearAxleMaxObserved = serializeVec2(rearWheel.getPosition());
     }
+  }
+
+  function getRearDriveTorqueForCurrentSpeed(): number {
+    if (!tuning.controls.constantPowerWatts) {
+      return tuning.controls.rearDriveTorque;
+    }
+
+    // Prevent singular torque at or near zero wheel speed while keeping the
+    // drive close to constant-power behavior through the usable speed range.
+    const minimumReferenceSpeed = 4;
+    const wheelSpeed = Math.max(Math.abs(rearWheel.getAngularVelocity()), minimumReferenceSpeed);
+
+    return tuning.controls.constantPowerWatts / wheelSpeed;
   }
 }
 
