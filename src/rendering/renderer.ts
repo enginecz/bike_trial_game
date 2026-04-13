@@ -6,12 +6,16 @@ import type { Level } from '../world/level';
 import type { OverlayLegendEntry } from '../game/debug-hud';
 import type { BikeLocalPoint, BikeRenderingBody } from '../data/bikes/shared';
 
+declare const __APP_HEADER_TEXT__: string;
+
 export interface RenderScene {
   activeBike: BikeDefinition;
   camera: Camera;
-  debugLines: string[];
+  controlsLines: string[];
+  gridVisible: boolean;
   level: Level;
   physics: PhysicsRenderState;
+  statsLines: string[];
   suspensionDebugEnabled: boolean;
   terrainDebugEnabled: boolean;
   overlayLegendEntries: OverlayLegendEntry[];
@@ -77,22 +81,48 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     context.save();
     applyWorldTransform(camera, width, height);
 
+    const minX = Math.floor(camera.position.x - width * 0.5 / camera.zoom.current) - 1;
+    const maxX = Math.ceil(camera.position.x + width * 0.5 / camera.zoom.current) + 1;
+    const minY = Math.floor(camera.position.y - height * 0.32 / camera.zoom.current) - 1;
+    const maxY = Math.ceil(camera.position.y + height * 0.68 / camera.zoom.current) + 1;
+
+    context.beginPath();
+    for (let x = minX; x <= maxX; x += 1) {
+      if (x % 10 === 0) {
+        continue;
+      }
+
+      context.moveTo(x, minY);
+      context.lineTo(x, maxY);
+    }
+
+    for (let y = minY; y <= maxY; y += 1) {
+      if (y % 10 === 0) {
+        continue;
+      }
+
+      context.moveTo(minX, y);
+      context.lineTo(maxX, y);
+    }
+
     context.lineWidth = 1 / camera.zoom.current;
     context.strokeStyle = '#202020';
+    context.stroke();
 
-    for (let x = -40; x <= 80; x += 2) {
-      context.beginPath();
-      context.moveTo(x, -10);
-      context.lineTo(x, 10);
-      context.stroke();
+    context.beginPath();
+    for (let x = Math.floor(minX / 10) * 10; x <= maxX; x += 10) {
+      context.moveTo(x, minY);
+      context.lineTo(x, maxY);
     }
 
-    for (let y = -10; y <= 10; y += 2) {
-      context.beginPath();
-      context.moveTo(-40, y);
-      context.lineTo(80, y);
-      context.stroke();
+    for (let y = Math.floor(minY / 10) * 10; y <= maxY; y += 10) {
+      context.moveTo(minX, y);
+      context.lineTo(maxX, y);
     }
+
+    context.lineWidth = 2 / camera.zoom.current;
+    context.strokeStyle = '#303030';
+    context.stroke();
 
     context.restore();
   }
@@ -327,7 +357,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     context.restore();
   }
 
-  function drawOverlayLegend(entries: OverlayLegendEntry[], width: number) {
+  function drawOverlayLegend(entries: OverlayLegendEntry[], width: number, height: number) {
     if (entries.length === 0) {
       return;
     }
@@ -335,7 +365,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     const panelWidth = 520;
     const panelX = Math.max(460, width - panelWidth - 160);
-    const panelY = 92;
+    const panelY = Math.max(Math.floor(height * 0.5), 92);
     const lineHeight = 22;
     const panelHeight = 20 + (entries.length + 1) * lineHeight;
 
@@ -346,17 +376,18 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     context.lineWidth = 1;
     context.strokeRect(panelX, panelY, panelWidth, panelHeight);
 
-    context.font = '14px monospace';
+    context.font = '700 14px monospace';
     context.fillStyle = '#f0f0f0';
     context.fillText('Overlay Legend', panelX + 14, panelY + 24);
 
+    context.font = '14px monospace';
     entries.forEach((entry, index) => {
       context.fillStyle = entry.color;
       context.fillText(entry.label, panelX + 14, panelY + 46 + index * lineHeight);
     });
   }
 
-  function drawTerrainLegend(entries: OverlayLegendEntry[], width: number) {
+  function drawTerrainLegend(entries: OverlayLegendEntry[], width: number, height: number) {
     if (entries.length === 0) {
       return;
     }
@@ -364,7 +395,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     const panelWidth = 420;
     const panelX = Math.max(560, width - panelWidth - 220);
-    const panelY = 362;
+    const panelY = Math.max(Math.floor(height * 0.5) + 270, 362);
     const lineHeight = 22;
     const panelHeight = 20 + (entries.length + 1) * lineHeight;
 
@@ -375,10 +406,11 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     context.lineWidth = 1;
     context.strokeRect(panelX, panelY, panelWidth, panelHeight);
 
-    context.font = '14px monospace';
+    context.font = '700 14px monospace';
     context.fillStyle = '#f0f0f0';
     context.fillText('Terrain Legend', panelX + 14, panelY + 24);
 
+    context.font = '14px monospace';
     entries.forEach((entry, index) => {
       context.fillStyle = entry.color;
       context.fillText(entry.label, panelX + 14, panelY + 46 + index * lineHeight);
@@ -388,28 +420,27 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   function drawLabels(width: number, height: number) {
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     context.fillStyle = '#f4f4f4';
-    context.font = '600 28px Arial';
-    context.fillText('Bike Trial Game', 24, 42);
+    const titleText = 'Bike Trial Game';
+    const suffixText = __APP_HEADER_TEXT__.startsWith(titleText) ? __APP_HEADER_TEXT__.slice(titleText.length) : '';
 
-    context.fillStyle = '#bfbfbf';
-    context.font = '16px Arial';
-    context.fillText('Physics slice: Planck multibody bike, fixed timestep, simple debug rendering', 24, 68);
+    context.font = '700 14px monospace';
+    context.fillText(titleText, 24, 30);
 
-    context.strokeStyle = '#2d2d2d';
-    context.lineWidth = 1;
-    context.beginPath();
-    context.moveTo(24, height - 110);
-    context.lineTo(width - 24, height - 110);
-    context.stroke();
+    if (suffixText) {
+      const titleWidth = context.measureText(titleText).width;
+      context.font = '14px monospace';
+      context.fillText(suffixText, 24 + titleWidth, 30);
+    }
   }
 
-  function drawDebugOverlay(lines: string[], width: number) {
+  function drawHudPanel(title: string, lines: string[], panelX: number, panelY: number, panelWidth: number) {
+    if (lines.length === 0) {
+      return;
+    }
+
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    const panelWidth = 396;
-    const panelX = 24;
-    const panelY = 92;
     const lineHeight = 22;
-    const panelHeight = 20 + lines.length * lineHeight;
+    const panelHeight = 20 + (lines.length + 1) * lineHeight;
 
     context.fillStyle = 'rgba(12, 12, 12, 0.82)';
     context.fillRect(panelX, panelY, panelWidth, panelHeight);
@@ -419,10 +450,12 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     context.strokeRect(panelX, panelY, panelWidth, panelHeight);
 
     context.fillStyle = '#f0f0f0';
-    context.font = '14px monospace';
+    context.font = '700 14px monospace';
+    context.fillText(title, panelX + 14, panelY + 24);
 
+    context.font = '14px monospace';
     lines.forEach((line, index) => {
-      context.fillText(line, panelX + 14, panelY + 24 + index * lineHeight);
+      context.fillText(line, panelX + 14, panelY + 46 + index * lineHeight);
     });
   }
 
@@ -433,15 +466,18 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       const height = canvas.clientHeight;
 
       clear(width, height);
-      drawGrid(scene.camera, width, height);
+      if (scene.gridVisible) {
+        drawGrid(scene.camera, width, height);
+      }
       drawTerrain(scene, width, height);
       drawTerrainDebug(scene, width, height);
       drawBike(scene, width, height);
       drawSuspensionDebug(scene, width, height);
       drawLabels(width, height);
-      drawDebugOverlay(scene.debugLines, width);
-      drawOverlayLegend(scene.suspensionDebugEnabled ? scene.overlayLegendEntries : [], width);
-      drawTerrainLegend(scene.terrainDebugEnabled ? scene.terrainLegendEntries : [], width);
+      drawHudPanel('Controls', scene.controlsLines, Math.max(24, width - 430 - 160 - Math.floor(width / 6)), 26, 860);
+      drawHudPanel('Stats', scene.statsLines, 24, 56, 430);
+      drawOverlayLegend(scene.suspensionDebugEnabled ? scene.overlayLegendEntries : [], width, height);
+      drawTerrainLegend(scene.terrainDebugEnabled ? scene.terrainLegendEntries : [], width, height);
     },
   };
 }

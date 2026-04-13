@@ -6,6 +6,8 @@ export interface BikeControls {
   brakeRear: number;
   riderShift: number;
   singleStepPressed: boolean;
+  statsTogglePressed: boolean;
+  gridTogglePressed: boolean;
   suspensionDebugTogglePressed: boolean;
   terrainDebugTogglePressed: boolean;
   testRigTogglePressed: boolean;
@@ -30,6 +32,8 @@ export function readBikeControls(input: KeyboardInput, testSpawnCount = 0): Bike
     brakeRear,
     riderShift,
     singleStepPressed: input.consumePressed('KeyN'),
+    statsTogglePressed: input.consumePressed('KeyD'),
+    gridTogglePressed: input.consumePressed('KeyH'),
     suspensionDebugTogglePressed: input.consumePressed('KeyO'),
     terrainDebugTogglePressed: input.consumePressed('KeyG'),
     testRigTogglePressed: input.consumePressed('KeyT'),

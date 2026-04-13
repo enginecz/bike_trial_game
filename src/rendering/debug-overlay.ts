@@ -1,17 +1,23 @@
 export interface DebugOverlay {
-  getLines(): string[];
-  setLines(lines: string[]): void;
+  getControlsLines(): string[];
+  getStatsLines(): string[];
+  setPanels(controlsLines: string[], statsLines: string[]): void;
 }
 
 export function createDebugOverlay(): DebugOverlay {
-  let lines: string[] = [];
+  let controlsLines: string[] = [];
+  let statsLines: string[] = [];
 
   return {
-    getLines() {
-      return lines;
+    getControlsLines() {
+      return controlsLines;
     },
-    setLines(nextLines) {
-      lines = nextLines;
+    getStatsLines() {
+      return statsLines;
+    },
+    setPanels(nextControlsLines, nextStatsLines) {
+      controlsLines = nextControlsLines;
+      statsLines = nextStatsLines;
     },
   };
 }

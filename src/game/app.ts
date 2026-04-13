@@ -1,6 +1,6 @@
 import { createFixedStepLoop } from '../core/fixed-step-loop';
 import { readBikeControls } from './bike-controls';
-import { createDebugHudLines, createOverlayLegendEntries, createTerrainLegendEntries } from './debug-hud';
+import { createDebugHudPanels, createOverlayLegendEntries, createTerrainLegendEntries } from './debug-hud';
 import { defaultGameSessionConfig, getDefaultBikeDefinition } from './session-config';
 import { createPhysicsSimulation } from '../physics/simulation';
 import { createCamera } from '../rendering/camera';
@@ -29,6 +29,8 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
   const debugOverlay = createDebugOverlay();
   let activeSpawnName = 'Main Spawn';
   let paused = false;
+  let statsVisible = false;
+  let gridVisible = false;
   let suspensionDebugEnabled = false;
   let terrainDebugEnabled = false;
   let inspectionZoom = 1;
@@ -54,6 +56,14 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
 
       if (controls.pausePressed) {
         paused = !paused;
+      }
+
+      if (controls.statsTogglePressed) {
+        statsVisible = !statsVisible;
+      }
+
+      if (controls.gridTogglePressed) {
+        gridVisible = !gridVisible;
       }
 
       if (controls.suspensionDebugTogglePressed) {
@@ -132,31 +142,33 @@ export function createGameApp(canvas: HTMLCanvasElement): GameApp {
         zoom: targetZoom,
       });
 
-      debugOverlay.setLines(
-        createDebugHudLines(
-          {
-            activeSpawnName,
-            activeBike,
-            camera,
-            controls,
-            inputSummary: input.describeActiveKeys(),
-            level,
-            paused,
-            snapshot,
-            suspensionDebugEnabled,
-            terrainDebugEnabled,
-            testRigMode: physics.isTestRigMode(),
-          },
-          activeBike.tuning,
-        ),
+      const hudPanels = createDebugHudPanels(
+        {
+          activeSpawnName,
+          activeBike,
+          camera,
+          controls,
+          inputSummary: input.describeActiveKeys(),
+          level,
+          paused,
+          snapshot,
+          suspensionDebugEnabled,
+          terrainDebugEnabled,
+          testRigMode: physics.isTestRigMode(),
+        },
+        activeBike.tuning,
       );
+
+      debugOverlay.setPanels(hudPanels.controlsLines, hudPanels.statsLines);
     },
     render() {
       renderer.resize();
       renderer.render({
         activeBike,
         camera,
-        debugLines: debugOverlay.getLines(),
+        controlsLines: debugOverlay.getControlsLines(),
+        statsLines: statsVisible ? debugOverlay.getStatsLines() : [],
+        gridVisible,
         level,
         physics: physics.getRenderState(),
         suspensionDebugEnabled,
