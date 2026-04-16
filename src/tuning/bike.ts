@@ -86,12 +86,17 @@ export interface BikeTuning {
     frameAnchorY: number;
     frequencyHz: number;
     dampingRatio: number;
+    springRate?: number;
+    compressionDamping?: number;
+    reboundDamping?: number;
     lowerSwingarmAngle: number;
     upperSwingarmAngle: number;
   };
   frontSuspension: {
     springStrength: number;
     damping: number;
+    compressionDamping?: number;
+    reboundDamping?: number;
     restOffset: number;
     responseSpeed: number;
     maxMotorSpeed: number;
@@ -134,13 +139,16 @@ export function createBikeTuningVariant(base: BikeTuning, overrides: BikeTuningO
 }
 
 export function getBikeQuickTuneLines(tuning: BikeTuning): string[] {
+  const rearSpringLine = tuning.rearSuspension.springRate
+    ? `rear spring ${(tuning.rearSuspension.springRate / 1000).toFixed(1)}kN/m / ${tuning.rearSuspension.dampingRatio.toFixed(2)}`
+    : `rear spring ${tuning.rearSuspension.frequencyHz.toFixed(2)}Hz / ${tuning.rearSuspension.dampingRatio.toFixed(2)}`;
   const driveLine = tuning.controls.constantPowerWatts
     ? `rear drive ${(tuning.controls.constantPowerWatts / 1000).toFixed(1)}kW @ any rpm`
     : `rear drive ${tuning.controls.rearDriveTorque.toFixed(0)} @ ${tuning.controls.throttleMotorSpeed.toFixed(0)}`;
 
   return [
-    `rear spring ${tuning.rearSuspension.frequencyHz.toFixed(2)}Hz / ${tuning.rearSuspension.dampingRatio.toFixed(2)}`,
-    `front spring ${tuning.frontSuspension.springStrength.toFixed(0)} / ${tuning.frontSuspension.damping.toFixed(0)}`,
+    rearSpringLine,
+    `front spring ${tuning.frontSuspension.springStrength.toFixed(0)} / ${(tuning.frontSuspension.reboundDamping ?? tuning.frontSuspension.damping).toFixed(0)}`,
     driveLine,
     `rider range ${tuning.rider.shiftRange.toFixed(2)} force ${tuning.rider.maxMotorForce.toFixed(0)}`,
   ];

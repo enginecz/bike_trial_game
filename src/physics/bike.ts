@@ -132,11 +132,25 @@ export interface Bike {
 interface SpringDamper {
   joint: planck.PrismaticJoint;
   stiffness: number;
-  damping: number;
+  compressionDamping: number;
+  reboundDamping: number;
   restOffset: number;
   responseSpeed: number;
   maxMotorSpeed: number;
   maxMotorForce: number;
+}
+
+interface RearSuspensionModel {
+  restLength: number;
+  minLength: number;
+  maxLength: number;
+  springRate: number;
+  compressionDamping: number;
+  reboundDamping: number;
+  bumpStopStiffness: number;
+  bumpStopDamping: number;
+  topOutStiffness: number;
+  topOutDamping: number;
 }
 
 interface BikeOptions {
@@ -301,20 +315,6 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
     ),
   ) as planck.RevoluteJoint;
 
-  const rearShockJoint = world.createJoint(
-    planck.DistanceJoint(
-      {
-        collideConnected: false,
-        frequencyHz: tuning.rearSuspension.frequencyHz,
-        dampingRatio: tuning.rearSuspension.dampingRatio,
-      },
-      frame,
-      swingarm,
-      frame.getWorldPoint(planck.Vec2(tuning.rearSuspension.frameAnchorX, tuning.rearSuspension.frameAnchorY)),
-      swingarm.getWorldPoint(planck.Vec2(tuning.swingarm.shockMountOffsetX, tuning.swingarm.shockMountOffsetY)),
-    ),
-  ) as planck.DistanceJoint;
-
   const forkSliderJoint = world.createJoint(
     planck.PrismaticJoint(
       {
@@ -351,7 +351,8 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
   const frontSpring: SpringDamper = {
     joint: forkSliderJoint,
     stiffness: tuning.frontSuspension.springStrength,
-    damping: tuning.frontSuspension.damping,
+    compressionDamping: tuning.frontSuspension.compressionDamping ?? tuning.frontSuspension.damping,
+    reboundDamping: tuning.frontSuspension.reboundDamping ?? tuning.frontSuspension.damping,
     restOffset: tuning.frontSuspension.restOffset,
     responseSpeed: tuning.frontSuspension.responseSpeed,
     maxMotorSpeed: tuning.frontSuspension.maxMotorSpeed,
@@ -360,16 +361,41 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
 
   const frontTravelMin = forkSliderJoint.getLowerLimit();
   const frontTravelMax = forkSliderJoint.getUpperLimit();
-  const rearSpringRestLength = rearShockJoint.getLength();
+  const rearSpringRestLength = getRearShockLengthForRelativeSwingarmAngle(0);
+  const rearSpringMinLength = getRearShockLengthForRelativeSwingarmAngle(tuning.rearSuspension.lowerSwingarmAngle);
+  const rearSpringMaxLength = getRearShockLengthForRelativeSwingarmAngle(tuning.rearSuspension.upperSwingarmAngle);
+  const rearSuspensionEffectiveMass = rearWheel.getMass() + swingarm.getMass() * 0.7;
+  const rearSuspensionSpringRate = tuning.rearSuspension.springRate ??
+    (() => {
+      const rearSuspensionAngularFrequency = tuning.rearSuspension.frequencyHz * Math.PI * 2;
+      return rearSuspensionEffectiveMass * rearSuspensionAngularFrequency * rearSuspensionAngularFrequency;
+    })();
+  const rearSuspensionDamping =
+    2 * tuning.rearSuspension.dampingRatio * Math.sqrt(rearSuspensionSpringRate * rearSuspensionEffectiveMass);
+  const rearSuspension: RearSuspensionModel = {
+    restLength: rearSpringRestLength,
+    minLength: rearSpringMinLength,
+    maxLength: rearSpringMaxLength,
+    springRate: rearSuspensionSpringRate,
+    compressionDamping: tuning.rearSuspension.compressionDamping ?? rearSuspensionDamping,
+    reboundDamping: tuning.rearSuspension.reboundDamping ?? rearSuspensionDamping,
+    bumpStopStiffness: rearSuspensionSpringRate * 18,
+    bumpStopDamping: rearSuspensionDamping * 6,
+    topOutStiffness: rearSuspensionSpringRate * 12,
+    topOutDamping: rearSuspensionDamping * 4,
+  };
   let rearTravelMinObserved = 0;
   let rearTravelMaxObserved = 0;
   let rearAxleMinObserved = serializeVec2(rearWheel.getPosition());
   let rearAxleMaxObserved = serializeVec2(rearWheel.getPosition());
 
+  projectRearSuspensionGeometry();
   captureDebugState();
 
   return {
     applyControls(controls) {
+      projectRearSuspensionGeometry();
+
       const rearMotorSpeed = controls.throttle > 0 ? tuning.controls.throttleMotorSpeed : 0;
       const rearMotorTorque =
         controls.throttle > 0
@@ -394,6 +420,7 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
       riderJoint.setMotorSpeed(riderSpeed);
 
       applyPrismaticSpringDamper(frontSpring);
+      applyRearSuspension(rearSuspension);
     },
     applyDebugRig(timeSeconds) {
       if (!options.testRigMode) {
@@ -411,8 +438,12 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
     getRenderState() {
       const rearWheelAnchor = serializeVec2(rearWheelJoint.getAnchorA());
       const frontWheelAnchor = serializeVec2(frontWheelJoint.getAnchorA());
-      const rearShockFrameAnchor = serializeVec2(rearShockJoint.getAnchorA());
-      const rearShockSwingarmAnchor = serializeVec2(rearShockJoint.getAnchorB());
+      const rearShockFrameAnchor = serializeVec2(
+        frame.getWorldPoint(planck.Vec2(tuning.rearSuspension.frameAnchorX, tuning.rearSuspension.frameAnchorY)),
+      );
+      const rearShockSwingarmAnchor = serializeVec2(
+        swingarm.getWorldPoint(planck.Vec2(tuning.swingarm.shockMountOffsetX, tuning.swingarm.shockMountOffsetY)),
+      );
       const frontSliderBase = serializeVec2(frame.getWorldPoint(planck.Vec2(tuning.fork.mountOffsetX, tuning.fork.mountOffsetY)));
       const frontSliderCurrent = offsetPointAlongAxis(frontSliderBase, forkAxis, forkSliderJoint.getJointTranslation());
       const frontAxleCurrent = serializeVec2(frontWheel.getPosition());
@@ -422,12 +453,12 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
       };
       const rearAxleMinLimit = offsetPointWithAngle(
         serializeVec2(frame.getWorldPoint(planck.Vec2(tuning.swingarm.pivotOffsetX, tuning.swingarm.pivotOffsetY))),
-        frame.getAngle() + tuning.rearSuspension.lowerSwingarmAngle,
+        frame.getAngle() + tuning.swingarm.initialAngle + tuning.rearSuspension.lowerSwingarmAngle,
         rearAxleLocalOffset,
       );
       const rearAxleMaxLimit = offsetPointWithAngle(
         serializeVec2(frame.getWorldPoint(planck.Vec2(tuning.swingarm.pivotOffsetX, tuning.swingarm.pivotOffsetY))),
-        frame.getAngle() + tuning.rearSuspension.upperSwingarmAngle,
+        frame.getAngle() + tuning.swingarm.initialAngle + tuning.rearSuspension.upperSwingarmAngle,
         rearAxleLocalOffset,
       );
 
@@ -469,7 +500,7 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
     },
     getState() {
       const frontTravel = forkSliderJoint.getJointTranslation();
-      const rearSpringLength = getPointDistance(rearShockJoint.getAnchorA(), rearShockJoint.getAnchorB());
+      const rearSpringLength = getRearShockLengthForRelativeSwingarmAngle(swingarmPivotJoint.getJointAngle());
       const rearTravel = rearSpringRestLength - rearSpringLength;
 
       return {
@@ -500,7 +531,7 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
   };
 
   function captureDebugState() {
-    const rearSpringLength = getPointDistance(rearShockJoint.getAnchorA(), rearShockJoint.getAnchorB());
+    const rearSpringLength = getRearShockLengthForRelativeSwingarmAngle(swingarmPivotJoint.getJointAngle());
     const rearTravel = rearSpringRestLength - rearSpringLength;
 
     rearTravelMinObserved = Math.min(rearTravelMinObserved, rearTravel);
@@ -513,6 +544,123 @@ export function createBike(world: planck.World, tuning: BikeTuning, options: Bik
     if (rearTravel === rearTravelMaxObserved) {
       rearAxleMaxObserved = serializeVec2(rearWheel.getPosition());
     }
+  }
+
+  function getRearShockLengthForRelativeSwingarmAngle(relativeAngle: number) {
+    const absoluteAngle = tuning.swingarm.initialAngle + relativeAngle;
+    const shockMountWorld = offsetPointWithAngle(
+      {
+        x: tuning.swingarm.pivotOffsetX,
+        y: tuning.swingarm.pivotOffsetY,
+      },
+      absoluteAngle,
+      {
+        x: tuning.swingarm.shockMountOffsetX,
+        y: tuning.swingarm.shockMountOffsetY,
+      },
+    );
+
+    return Math.hypot(
+      tuning.rearSuspension.frameAnchorX - shockMountWorld.x,
+      tuning.rearSuspension.frameAnchorY - shockMountWorld.y,
+    );
+  }
+
+  function getRelativeSwingarmAngleForRearShockLength(targetLength: number) {
+    const lowerAngle = tuning.rearSuspension.lowerSwingarmAngle;
+    const upperAngle = tuning.rearSuspension.upperSwingarmAngle;
+    const minLength = getRearShockLengthForRelativeSwingarmAngle(lowerAngle);
+    const maxLength = getRearShockLengthForRelativeSwingarmAngle(upperAngle);
+    const clampedLength = clamp(targetLength, minLength, maxLength);
+
+    if (clampedLength <= minLength) {
+      return lowerAngle;
+    }
+
+    if (clampedLength >= maxLength) {
+      return upperAngle;
+    }
+
+    let low = lowerAngle;
+    let high = upperAngle;
+
+    for (let iteration = 0; iteration < 28; iteration += 1) {
+      const mid = (low + high) * 0.5;
+      const midLength = getRearShockLengthForRelativeSwingarmAngle(mid);
+
+      if (midLength < clampedLength) {
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+
+    return (low + high) * 0.5;
+  }
+
+  function applyRearSuspension(suspension: RearSuspensionModel) {
+    const currentAngle = swingarmPivotJoint.getJointAngle();
+    const currentLength = getRearShockLengthForRelativeSwingarmAngle(currentAngle);
+    const lengthDerivative = getRearShockLengthDerivative(currentAngle);
+    const shockSpeed = lengthDerivative * swingarmPivotJoint.getJointSpeed();
+    const springCompression = Math.max(0, suspension.restLength - currentLength);
+    const springForce = suspension.springRate * springCompression;
+    const dampingCoefficient = shockSpeed >= 0 ? suspension.reboundDamping : suspension.compressionDamping;
+    const dampingForce = -dampingCoefficient * shockSpeed;
+    const bumpStopCompression = Math.max(0, suspension.minLength - currentLength);
+    const bumpStopSpringForce = suspension.bumpStopStiffness * bumpStopCompression;
+    const bumpStopDampingForce = suspension.bumpStopDamping * Math.max(0, -shockSpeed);
+    const topOutExtension = Math.max(0, currentLength - suspension.maxLength);
+    const topOutSpringForce = -suspension.topOutStiffness * topOutExtension;
+    const topOutDampingForce = -suspension.topOutDamping * Math.max(0, shockSpeed);
+    const totalShockForce =
+      springForce +
+      dampingForce +
+      bumpStopSpringForce +
+      bumpStopDampingForce +
+      topOutSpringForce +
+      topOutDampingForce;
+    const suspensionTorque = totalShockForce * lengthDerivative;
+
+    swingarm.applyTorque(suspensionTorque, true);
+
+    if (frame.isDynamic()) {
+      frame.applyTorque(-suspensionTorque, true);
+    }
+  }
+
+  function projectRearSuspensionGeometry() {
+    const currentRelativeAngle = swingarmPivotJoint.getJointAngle();
+    const currentLength = getRearShockLengthForRelativeSwingarmAngle(currentRelativeAngle);
+    const targetRelativeAngle = getRelativeSwingarmAngleForRearShockLength(currentLength);
+
+    if (Math.abs(targetRelativeAngle - currentRelativeAngle) < 0.0001) {
+      return;
+    }
+
+    const rearPivotPosition = frame.getWorldPoint(planck.Vec2(tuning.swingarm.pivotOffsetX, tuning.swingarm.pivotOffsetY));
+    const rearPivotVelocity = frame.getLinearVelocityFromWorldPoint(rearPivotPosition);
+    const targetSwingarmAngle = frame.getAngle() + tuning.swingarm.initialAngle + targetRelativeAngle;
+
+    swingarm.setTransform(rearPivotPosition, targetSwingarmAngle);
+    swingarm.setLinearVelocity(rearPivotVelocity);
+    swingarm.setAngularVelocity(frame.getAngularVelocity());
+  }
+
+  function getRearShockLengthDerivative(relativeAngle: number) {
+    const epsilon = 0.0005;
+    const angleMin = tuning.rearSuspension.lowerSwingarmAngle;
+    const angleMax = tuning.rearSuspension.upperSwingarmAngle;
+    const sampleA = clamp(relativeAngle - epsilon, angleMin, angleMax);
+    const sampleB = clamp(relativeAngle + epsilon, angleMin, angleMax);
+
+    if (sampleA === sampleB) {
+      return 0;
+    }
+
+    const lengthA = getRearShockLengthForRelativeSwingarmAngle(sampleA);
+    const lengthB = getRearShockLengthForRelativeSwingarmAngle(sampleB);
+    return (lengthB - lengthA) / (sampleB - sampleA);
   }
 
   function getRearDriveTorqueForCurrentSpeed(): number {
@@ -534,7 +682,8 @@ function applyPrismaticSpringDamper(spring: SpringDamper) {
   const speed = spring.joint.getJointSpeed();
   const positionError = spring.restOffset - translation;
   const targetSpeed = clamp(positionError * spring.responseSpeed - speed * 0.35, -spring.maxMotorSpeed, spring.maxMotorSpeed);
-  const requestedForce = Math.abs(positionError * spring.stiffness - speed * spring.damping);
+  const dampingCoefficient = speed >= 0 ? spring.reboundDamping : spring.compressionDamping;
+  const requestedForce = Math.abs(positionError * spring.stiffness - speed * dampingCoefficient);
   const maxForce = clamp(requestedForce, 0, spring.maxMotorForce);
 
   spring.joint.enableMotor(true);

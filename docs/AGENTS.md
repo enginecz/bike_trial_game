@@ -114,6 +114,7 @@ Avoid:
 - Prefer explicit names over clever abstractions.
 - Keep functions short and single-purpose where practical.
 - Add comments only where they genuinely improve understanding.
+- Write all documentation and all code comments in English.
 - Avoid premature abstraction.
 - Avoid unnecessary classes when plain modules/functions are clearer.
 
